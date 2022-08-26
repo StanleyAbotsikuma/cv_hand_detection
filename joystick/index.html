@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>JoyStick</title>
+	<style type="text/css">
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			background-color: #333;
+			background-image: url(bgimage.png);
+		}
+
+		.main {
+			width: 1200px;
+			height: 600px;
+			background-color: rgba(255, 255, 255, 0.4);
+			margin: auto;
+			margin-top: 60px;
+			box-shadow: 0 0 20px 5px #747470;
+			padding: 25px;
+			border-radius: 300px 0 0 300px;
+		}
+
+		.main1 {
+			width: 550px;
+			height: 550px;
+			border-radius: 50%;
+			display: block;
+			position: relative;
+			float: left;
+			background: white;
+			box-sizing: border-box;
+			background-image: url(bg.jpg);
+		}
+
+		.knob {
+			width: 200px;
+			height: 200px;
+			background-image: url(ld.jpg);
+			border-radius: 50%;
+			top: 175px;
+			left: 175px;
+			box-shadow: 0 0 20px 4px #030202;
+			border: solid 10px #1b1b1b;
+			position: absolute;
+			transition-timing-function: ease-in;
+			transition: 0.3s
+		}
+
+		.panel {
+			width: 580px;
+			height: 400px;
+			background-color: #ebebeb;
+			position: relative;
+			float: right;
+			box-sizing: border-box !important;
+			margin-top: 70px;
+			padding: 20px;
+		}
+
+		.panel1 {
+			width: 100%;
+			height: 100px;
+			display: inline-flex;
+			position: relative;
+		}
+
+		.panel_text {
+			font-size: 25pt;
+			padding: 20px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="main">
+		<div class="main1">
+			<div class="knob">
+
+			</div>
+		</div>
+		<div class="panel">
+			<div class="panel1"><img src="server_offline.gif" id="server_offline">
+				<img src="server_online.png" id="server_online">
+				<p class="panel_text" id="server_text">Server is offline</p>
+			</div>
+			<div class="panel1"><img src="mcu_offline.gif" id="mcu_offline"><img src="mcu_online.png" id="mcu_online">
+				<p class="panel_text" id="mcu_text">Node MCU is offline</p>
+			</div>
+		</div>
+	</div>
+</body>
+<script src="reconnecting-websocket.js" ></script>
+
+<script type="text/javascript">
+	let server = false;
+	let mcu = false;
+	function server_toggle(data) {
+		server = data
+
+		if (server) {
+			document.querySelector('#server_offline').style.display = "none";
+
+			document.querySelector('#server_online').style.display = "block";
+			document.querySelector('#server_text').innerHTML="Online";
+
+		} else {
+			document.querySelector('#server_offline').style.display = "block";
+			document.querySelector('#server_online').style.display = "none";
+			document.querySelector('#server_text').innerHTML="Server is offline";
+
+		}
+	}
+	server_toggle(false);
+
+	function mcu_toggle(data) {
+		mcu = data;
+		if (mcu) {
+			document.querySelector('#mcu_offline').style.display = "none";
+			document.querySelector('#mcu_online').style.display = "block";
+			document.querySelector('#mcu_text').innerHTML="Online";
+		} else {
+			document.querySelector('#mcu_offline').style.display = "block";
+			document.querySelector('#mcu_online').style.display = "none";
+			document.querySelector('#mcu_text').innerHTML="Node MCU is offline";
+
+		}
+
+	}
+	mcu_toggle(false);
+
+
+	const socket = new  ReconnectingWebSocket("ws://localhost:4041");
+
+	function center() {
+		document.querySelector('.knob').style.setProperty("top", "175px");
+		document.querySelector('.knob').style.setProperty("left", "175px");
+		send_commands("stop");
+	}
+
+	function c(x) {
+		if (x < 0) {
+			return 0;
+		}
+		else if (x > 340) {
+			return 340;
+		}
+		else {
+			return x;
+		}
+	}
+	function send_commands(command) {
+		const cmd = '{"type":"board","data":"' + command + '"}';
+		//  socket.send(JSON.stringify(cmd));
+		socket.send(cmd);
+	}
+
+	function receive_co(x, y) {
+
+		let top = c((((550 / 480) * y) - 100));
+		let left = c((((550 / 640) * x) - 100));
+		// let top = ((550/480) * y)- 100;
+		// let left = ((550/640) * x)- 100;
+		console.log("top :" + top);
+		console.log("left :" + left);
+
+		if (top <= 10 && left >= 110 && left <= 200) {
+			//forward
+			console.log("forward");
+			send_commands("forward");
+		}
+		else if (left <= 10 && top >= 140 && top <= 200) {
+			//left
+
+			console.log("left");
+			send_commands("left");
+		}
+		else if (left >= 330 && top >= 140 && top <= 200) {
+			//right
+
+			console.log("right");
+			send_commands("right");
+
+		}
+		else if (top >= 330 && left >= 110 && left <= 200) {
+			//brake
+
+			console.log("brake");
+			send_commands("back");
+		}
+
+
+		document.querySelector('.knob').style.setProperty("top", top + "px");
+		document.querySelector('.knob').style.setProperty("left", left + "px");
+	}
+	// document.querySelector('.knob').style.setProperty("top", "10px");	
+
+	socket.onopen = (event) => {
+		// console.log("Connection Establish");
+		server = false;
+		mcu = false;
+		server_toggle(false);
+		mcu_toggle(false);
+		socket.send(JSON.stringify({ "type": "joystick", "message": "connected" }));
+	};
+
+	socket.onmessage = (event) => {
+		// console.log(event.data);
+		let objData = JSON.parse(event.data);
+		if (objData.type == "detection") {
+			//from detection script
+			if (objData.message == "connected") {
+				//when detection is connected
+				server_toggle(true);
+
+			}
+			else if (objData.message == "disconnected") {
+				//when detection is disconnected
+				server_toggle(false);
+
+			}
+			else if (objData.message == "send_data") {
+				//when detection sends information
+				receive_co(objData.x, objData.y);
+			}
+			else if (objData.message == "no_hand") {
+				//when detection sends information
+				center();
+			}
+
+
+
+
+
+
+		} else if(objData.type == "board") {
+			//from detection script
+			if (objData.message == "connected") {
+				//when detection is connected
+				mcu_toggle(true);
+
+			}else if (objData.message == "disconnected") {
+				//when detection is connected
+				mcu_toggle(false);
+
+			}
+		}
+
+
+
+		// console.log(obj['type']);
+
+		// console.log(obj['message']);
+		// console.log(obj['x']);
+		// console.log(obj['y']);
+
+		// console.log("Connection onmessage");
+
+	};
+	socket.onclose = (event) => {
+		console.log("Connection closed");
+		// socket.send("Here's some text that the server is urgently awaiting!");
+		server = false;
+		mcu = false;
+		server_toggle(false);
+		mcu_toggle(false);
+	};
+
+	socket.onerror = (event) => {
+		console.log("Connection error");
+		// socket.send("Here's some text that the server is urgently awaiting!");
+	};
+
+
+</script>
+
+</html>
